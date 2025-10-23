@@ -13,6 +13,8 @@ function App() {
   const [accelSupported, setAccelSupported] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncErrors, setSyncErrors] = useState(0);
   
   const dataBuffer = useRef([]);
   const gpsWatchId = useRef(null);
@@ -21,6 +23,20 @@ function App() {
 
   // Check sensor support on mount
   useEffect(() => {
+    // Monitor online/offline status
+    const handleOnline = () => {
+      setIsOnline(true);
+      setStatus(prev => prev.replace('OFFLINE', 'Online'));
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      setStatus('OFFLINE - Data will be buffered locally');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     // Check GPS support
     if ('geolocation' in navigator) {
       setGpsSupported(true);
@@ -47,6 +63,11 @@ function App() {
         })
         .catch(console.error);
     }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // Handle accelerometer updates
@@ -72,49 +93,95 @@ function App() {
     if (!isRecording) return;
 
     const syncInterval = setInterval(async () => {
-      if (dataBuffer.current.length > 0) {
+      if (dataBuffer.current.length > 0 && isOnline) {
         try {
           const dataToSend = [...dataBuffer.current];
-          dataBuffer.current = [];
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
           const response = await fetch(`${API_URL}/api/data`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: dataToSend })
+            body: JSON.stringify({ data: dataToSend }),
+            signal: controller.signal
           });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
 
           const result = await response.json();
           if (result.success) {
+            // Only clear buffer after successful sync
+            dataBuffer.current = [];
             setDataPoints(result.totalPoints);
             setLastSync(new Date().toLocaleTimeString());
+            setSyncErrors(0);
+            setStatus(`Recording... Synced ${dataToSend.length} points`);
           }
         } catch (error) {
           console.error('Sync error:', error);
-          setStatus('Sync error - check backend connection');
+          setSyncErrors(prev => prev + 1);
+          
+          if (error.name === 'AbortError') {
+            setStatus('Sync timeout - data buffered locally');
+          } else if (!isOnline) {
+            setStatus('OFFLINE - Data buffered locally');
+          } else {
+            setStatus(`Sync error (${syncErrors + 1}) - data buffered`);
+          }
+          
+          // Keep data in buffer for retry
         }
+      } else if (dataBuffer.current.length > 0 && !isOnline) {
+        setStatus(`OFFLINE - ${dataBuffer.current.length} points buffered`);
       }
     }, 5000);
 
     return () => clearInterval(syncInterval);
-  }, [isRecording]);
+  }, [isRecording, isOnline, syncErrors]);
 
   const startRecording = async () => {
     try {
-      // Start new session on backend
-      const response = await fetch(`${API_URL}/api/session/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      const result = await response.json();
-      setSessionId(result.sessionId);
+      if (!isOnline) {
+        setStatus('OFFLINE - Recording will buffer data locally');
+      }
+
+      // Try to start new session on backend
+      if (isOnline) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          const response = await fetch(`${API_URL}/api/session/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          const result = await response.json();
+          setSessionId(result.sessionId);
+        } catch (error) {
+          console.error('Session start error:', error);
+          // Continue anyway with local session ID
+          setSessionId(Date.now().toString());
+          setStatus('Backend unavailable - recording locally');
+        }
+      } else {
+        setSessionId(Date.now().toString());
+      }
       
       startTime.current = Date.now();
       setIsRecording(true);
       setDataPoints(0);
       setLocalDataPoints(0);
+      setSyncErrors(0);
       dataBuffer.current = [];
-      setStatus('Recording started...');
+      setStatus(isOnline ? 'Recording started...' : 'Recording OFFLINE - data buffered');
 
       // Start GPS tracking
       if (gpsSupported) {
@@ -140,7 +207,9 @@ function App() {
 
             dataBuffer.current.push(dataPoint);
             setLocalDataPoints(prev => prev + 1);
-            setStatus(`Recording... ${dataBuffer.current.length} points buffered`);
+            
+            const statusPrefix = isOnline ? 'Recording...' : 'OFFLINE -';
+            setStatus(`${statusPrefix} ${dataBuffer.current.length} points buffered`);
           },
           (error) => {
             console.error('GPS error:', error);
@@ -148,8 +217,8 @@ function App() {
           },
           {
             enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 5000
+            maximumAge: 1000,
+            timeout: 15000
           }
         );
       }
@@ -168,36 +237,82 @@ function App() {
       gpsWatchId.current = null;
     }
 
-    // Send any remaining data
-    if (dataBuffer.current.length > 0) {
-      try {
-        await fetch(`${API_URL}/api/data`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: dataBuffer.current })
-        });
-      } catch (error) {
-        console.error('Final sync error:', error);
+    // Send any remaining data if online
+    if (dataBuffer.current.length > 0 && isOnline) {
+      setStatus('Syncing final data...');
+      let retries = 3;
+      
+      while (retries > 0 && dataBuffer.current.length > 0) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+          await fetch(`${API_URL}/api/data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: dataBuffer.current }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          dataBuffer.current = [];
+          break;
+        } catch (error) {
+          console.error('Final sync error:', error);
+          retries--;
+          if (retries > 0) {
+            setStatus(`Retry syncing... (${retries} attempts left)`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
       }
     }
 
-    // Stop session
-    try {
-      await fetch(`${API_URL}/api/session/stop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (error) {
-      console.error('Stop session error:', error);
+    // Stop session if online
+    if (isOnline) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        await fetch(`${API_URL}/api/session/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+      } catch (error) {
+        console.error('Stop session error:', error);
+      }
     }
 
-    dataBuffer.current = [];
-    setStatus('Recording stopped. Ready to download.');
+    if (dataBuffer.current.length > 0) {
+      setStatus(`Recording stopped. ${dataBuffer.current.length} points not synced - check connection`);
+    } else {
+      setStatus('Recording stopped. Ready to download.');
+    }
   };
 
   const downloadCSV = async () => {
+    if (!isOnline) {
+      setStatus('Cannot download - you are offline');
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/api/data/download`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const response = await fetch(`${API_URL}/api/data/download`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -210,7 +325,11 @@ function App() {
       setStatus('CSV downloaded!');
     } catch (error) {
       console.error('Download error:', error);
-      setStatus('Download error - make sure data was collected');
+      if (error.name === 'AbortError') {
+        setStatus('Download timeout - try again');
+      } else {
+        setStatus('Download error - check connection');
+      }
     }
   };
 
@@ -252,6 +371,9 @@ function App() {
         </div>
 
         <div className="sensor-status">
+          <div className={`sensor-badge ${isOnline ? 'supported' : 'unsupported'}`}>
+            Network: {isOnline ? '✓ Online' : '✗ Offline'}
+          </div>
           <div className={`sensor-badge ${gpsSupported ? 'supported' : 'unsupported'}`}>
             GPS: {gpsSupported ? '✓' : '✗'}
           </div>
@@ -268,6 +390,10 @@ function App() {
           <div className="stat-card">
             <h3>Server Points</h3>
             <p className="stat-number">{dataPoints}</p>
+          </div>
+          <div className="stat-card">
+            <h3>Sync Errors</h3>
+            <p className="stat-number">{syncErrors}</p>
           </div>
           <div className="stat-card">
             <h3>Duration</h3>
@@ -322,6 +448,7 @@ function App() {
         <div className="warning-card">
           <p>⚠️ Keep this browser tab open while recording!</p>
           <p>📱 Keep your phone's screen on to prevent sensor pausing</p>
+          <p>📶 Data is buffered locally if connection drops - it will sync when back online</p>
         </div>
       </div>
     </div>
