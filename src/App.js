@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-// CHANGE THIS to your deployed backend URL after deployment!
-const API_URL = 'http://localhost:3001'; // Change to: https://your-app.railway.app
+// Updated to use your deployed backend
+const API_URL = 'https://sensor-data-backend.onrender.com';
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
@@ -90,7 +90,7 @@ function App() {
           }
         } catch (error) {
           console.error('Sync error:', error);
-          setStatus('Sync error - check backend URL');
+          setStatus('Sync error - check backend connection');
         }
       }
     }, 5000);
