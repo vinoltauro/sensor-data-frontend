@@ -1,8 +1,47 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Updated to use your deployed backend
+// Fix Leaflet default icon issue
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
 const API_URL = 'https://sensor-data-backend.onrender.com';
+
+// Component to auto-center map on current position
+function MapController({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom());
+    }
+  }, [center, map]);
+  return null;
+}
+
+// Bike station icon based on availability
+function getBikeIcon(station) {
+  const available = station.available_bikes || 0;
+  const total = station.bike_stands || 0;
+  const ratio = total > 0 ? available / total : 0;
+  
+  let color = '#dc3545'; // red
+  if (ratio > 0.5) color = '#28a745'; // green
+  else if (ratio > 0.2) color = '#ffc107'; // yellow
+  
+  return L.divIcon({
+    className: 'custom-bike-icon',
+    html: `<div style="background-color: ${color}; width: 25px; height: 25px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 11px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${available}</div>`,
+    iconSize: [25, 25],
+    iconAnchor: [12, 12]
+  });
+}
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
@@ -16,14 +55,46 @@ function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncErrors, setSyncErrors] = useState(0);
   
+  // New map states
+  const [currentPosition, setCurrentPosition] = useState(null);
+  const [routePath, setRoutePath] = useState([]);
+  const [bikeStations, setBikeStations] = useState([]);
+  const [showMap, setShowMap] = useState(true);
+  
   const dataBuffer = useRef([]);
   const gpsWatchId = useRef(null);
   const accelRef = useRef({ x: 0, y: 0, z: 0 });
   const startTime = useRef(null);
 
+  // Fetch Dublin Bikes data
+  useEffect(() => {
+    const fetchBikes = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/firestore/dublin-bikes?limit=200`);
+        const result = await response.json();
+        if (result.success && result.data) {
+          // Get latest data for each station
+          const stationMap = new Map();
+          result.data.forEach(station => {
+            if (!stationMap.has(station.station_number) || 
+                station.fetched_at > stationMap.get(station.station_number).fetched_at) {
+              stationMap.set(station.station_number, station);
+            }
+          });
+          setBikeStations(Array.from(stationMap.values()));
+        }
+      } catch (error) {
+        console.error('Error fetching bikes:', error);
+      }
+    };
+
+    fetchBikes();
+    const interval = setInterval(fetchBikes, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
   // Check sensor support on mount
   useEffect(() => {
-    // Monitor online/offline status
     const handleOnline = () => {
       setIsOnline(true);
       setStatus(prev => prev.replace('OFFLINE', 'Online'));
@@ -37,7 +108,6 @@ function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Check GPS support
     if ('geolocation' in navigator) {
       setGpsSupported(true);
       setStatus('GPS: Available ✓');
@@ -45,7 +115,6 @@ function App() {
       setStatus('GPS: Not supported ✗');
     }
 
-    // Check accelerometer support
     if (window.DeviceMotionEvent) {
       setAccelSupported(true);
       setStatus(prev => prev + ' | Accelerometer: Available ✓');
@@ -53,7 +122,6 @@ function App() {
       setStatus(prev => prev + ' | Accelerometer: Not supported ✗');
     }
 
-    // Request motion permission for iOS
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       DeviceMotionEvent.requestPermission()
         .then(response => {
@@ -98,7 +166,7 @@ function App() {
           const dataToSend = [...dataBuffer.current];
           
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           const response = await fetch(`${API_URL}/api/data`, {
             method: 'POST',
@@ -115,7 +183,6 @@ function App() {
 
           const result = await response.json();
           if (result.success) {
-            // Only clear buffer after successful sync
             dataBuffer.current = [];
             setDataPoints(result.totalPoints);
             setLastSync(new Date().toLocaleTimeString());
@@ -133,8 +200,6 @@ function App() {
           } else {
             setStatus(`Sync error (${syncErrors + 1}) - data buffered`);
           }
-          
-          // Keep data in buffer for retry
         }
       } else if (dataBuffer.current.length > 0 && !isOnline) {
         setStatus(`OFFLINE - ${dataBuffer.current.length} points buffered`);
@@ -150,7 +215,6 @@ function App() {
         setStatus('OFFLINE - Recording will buffer data locally');
       }
 
-      // Try to start new session on backend
       if (isOnline) {
         try {
           const controller = new AbortController();
@@ -159,15 +223,15 @@ function App() {
           const response = await fetch(`${API_URL}/api/session/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: 'user_' + Date.now() }),
             signal: controller.signal
           });
           
           clearTimeout(timeoutId);
           const result = await response.json();
-          setSessionId(result.sessionId);
+          setSessionId(result.session_id);
         } catch (error) {
           console.error('Session start error:', error);
-          // Continue anyway with local session ID
           setSessionId(Date.now().toString());
           setStatus('Backend unavailable - recording locally');
         }
@@ -181,16 +245,23 @@ function App() {
       setLocalDataPoints(0);
       setSyncErrors(0);
       dataBuffer.current = [];
+      setRoutePath([]);
       setStatus(isOnline ? 'Recording started...' : 'Recording OFFLINE - data buffered');
 
-      // Start GPS tracking
       if (gpsSupported) {
         gpsWatchId.current = navigator.geolocation.watchPosition(
           (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            // Update map position and route
+            setCurrentPosition([lat, lng]);
+            setRoutePath(prev => [...prev, [lat, lng]]);
+
             const dataPoint = {
               timestamp: Date.now(),
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
+              latitude: lat,
+              longitude: lng,
               altitude: position.coords.altitude,
               speed: position.coords.speed,
               accuracy: position.coords.accuracy,
@@ -231,13 +302,11 @@ function App() {
   const stopRecording = async () => {
     setIsRecording(false);
     
-    // Stop GPS tracking
     if (gpsWatchId.current) {
       navigator.geolocation.clearWatch(gpsWatchId.current);
       gpsWatchId.current = null;
     }
 
-    // Send any remaining data if online
     if (dataBuffer.current.length > 0 && isOnline) {
       setStatus('Syncing final data...');
       let retries = 3;
@@ -268,7 +337,6 @@ function App() {
       }
     }
 
-    // Stop session if online
     if (isOnline) {
       try {
         const controller = new AbortController();
@@ -277,6 +345,7 @@ function App() {
         await fetch(`${API_URL}/api/session/stop`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
           signal: controller.signal
         });
         
@@ -334,7 +403,6 @@ function App() {
   };
 
   const requestPermissions = async () => {
-    // For iOS devices - request motion permission
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
         const response = await DeviceMotionEvent.requestPermission();
@@ -347,14 +415,18 @@ function App() {
       }
     }
 
-    // Request location permission
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        () => setStatus('Location permission granted!'),
+        (position) => {
+          setCurrentPosition([position.coords.latitude, position.coords.longitude]);
+          setStatus('Location permission granted!');
+        },
         (error) => setStatus(`Location error: ${error.message}`)
       );
     }
   };
+
+  const defaultCenter = currentPosition || [53.3498, -6.2603]; // Dublin center
 
   return (
     <div className="App">
@@ -432,6 +504,99 @@ function App() {
             </button>
           )}
         </div>
+
+        {/* LIVE MAP - Shows when recording or when there's a route */}
+        {(isRecording || routePath.length > 0) && currentPosition && (
+          <div className="live-map-card">
+            <div className="map-header">
+              <h3>🗺️ Live Route {isRecording && <span className="recording-dot"></span>}</h3>
+              <button 
+                className="toggle-map-btn" 
+                onClick={() => setShowMap(!showMap)}
+              >
+                {showMap ? '🔼 Hide Map' : '🔽 Show Map'}
+              </button>
+            </div>
+            
+            {showMap && (
+              <>
+                <div className="map-stats-bar">
+                  <span>📍 Points: {routePath.length}</span>
+                  <span>🚴 Bikes: {bikeStations.length} stations</span>
+                </div>
+                
+                <div className="map-wrapper">
+                  <MapContainer 
+                    center={defaultCenter} 
+                    zoom={15} 
+                    style={{ height: '400px', width: '100%' }}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; OpenStreetMap'
+                    />
+                    <MapController center={currentPosition} />
+                    
+                    {/* Your current position */}
+                    {currentPosition && (
+                      <Marker position={currentPosition}>
+                        <Popup>
+                          <strong>You are here</strong><br />
+                          Lat: {currentPosition[0].toFixed(5)}<br />
+                          Lng: {currentPosition[1].toFixed(5)}
+                        </Popup>
+                      </Marker>
+                    )}
+                    
+                    {/* Your route path */}
+                    {routePath.length > 1 && (
+                      <Polyline 
+                        positions={routePath} 
+                        color="#667eea" 
+                        weight={4}
+                        opacity={0.7}
+                      />
+                    )}
+                    
+                    {/* Dublin Bikes stations */}
+                    {bikeStations.map((station) => (
+                      station.position && (
+                        <Marker
+                          key={station.station_number}
+                          position={[station.position.lat, station.position.lng]}
+                          icon={getBikeIcon(station)}
+                        >
+                          <Popup>
+                            <strong>{station.station_name}</strong><br />
+                            📍 {station.address}<br />
+                            🚴 <strong>{station.available_bikes || 0}</strong> bikes available<br />
+                            🅿️ {station.available_bike_stands || 0} free stands<br />
+                            📊 Total: {station.bike_stands || 0}
+                          </Popup>
+                        </Marker>
+                      )
+                    ))}
+                  </MapContainer>
+                </div>
+
+                <div className="map-legend">
+                  <div className="legend-item">
+                    <div className="legend-color" style={{background: '#28a745'}}></div>
+                    <span>High availability (&gt;50%)</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color" style={{background: '#ffc107'}}></div>
+                    <span>Medium (20-50%)</span>
+                  </div>
+                  <div className="legend-item">
+                    <div className="legend-color" style={{background: '#dc3545'}}></div>
+                    <span>Low (&lt;20%)</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="info-card">
           <h3>Instructions</h3>
