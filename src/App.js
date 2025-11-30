@@ -196,7 +196,7 @@ function SessionDetailModal({ session, onClose }) {
   // Prepare chart data
   const prepareSpeedData = () => {
     if (!sessionData || !sessionData.dataPoints) return [];
-    
+
     return sessionData.dataPoints
       .filter((d, i) => i % 5 === 0) // Sample every 5th point
       .map((point, index) => ({
@@ -208,7 +208,7 @@ function SessionDetailModal({ session, onClose }) {
 
   const prepareAQIData = () => {
     if (!sessionData || !sessionData.dataPoints) return [];
-    
+
     return sessionData.dataPoints
       .filter((d, i) => d.airQuality && i % 5 === 0)
       .map((point, index) => ({
@@ -219,7 +219,7 @@ function SessionDetailModal({ session, onClose }) {
 
   const prepareActivityPieData = () => {
     if (!session.activities) return [];
-    
+
     return Object.entries(session.activities)
       .filter(([activity]) => activity !== 'unknown')
       .map(([activity, data]) => ({
@@ -326,8 +326,8 @@ function SessionDetailModal({ session, onClose }) {
                   gridTemplateColumns: '200px 1fr',
                   gap: '16px'
                 }}>
-                  <HealthScoreBadge 
-                    score={session.healthScore.totalScore} 
+                  <HealthScoreBadge
+                    score={session.healthScore.totalScore}
                     rating={session.healthScore.rating}
                   />
                   <div>
@@ -337,7 +337,7 @@ function SessionDetailModal({ session, onClose }) {
                         marginBottom: '8px',
                         borderRadius: '8px',
                         backgroundColor: insight.type === 'positive' ? '#E8F5E9' :
-                                       insight.type === 'warning' ? '#FFF3E0' : '#E3F2FD',
+                          insight.type === 'warning' ? '#FFF3E0' : '#E3F2FD',
                         fontSize: '14px'
                       }}>
                         <span>{insight.icon}</span> {insight.message}
@@ -447,7 +447,7 @@ function App() {
   const [dataPointsCount, setDataPointsCount] = useState(0);
   const [duration, setDuration] = useState(0);
   const [selectedSession, setSelectedSession] = useState(null);
-  
+
   const watchIdRef = useRef(null);
   const motionHandlerRef = useRef(null);
   const startTimeRef = useRef(null);
@@ -461,7 +461,7 @@ function App() {
         try {
           const token = await currentUser.getIdToken();
           setAuthToken(token);
-          
+
           // Login to backend
           const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
@@ -470,7 +470,7 @@ function App() {
               'Authorization': `Bearer ${token}`
             }
           });
-          
+
           const result = await response.json();
           if (result.success) {
             setUserProfile(result.user);
@@ -489,6 +489,42 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+
+  // Get initial GPS position when user logs in
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('🎯 Getting initial GPS position...');
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const pos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          console.log('✅ GPS position acquired:', pos);
+          setCurrentPosition(pos);
+        },
+        (error) => {
+          console.error('❌ GPS error:', error.message);
+          // Set default Dublin position if GPS fails
+          const defaultPos = { lat: 53.3498, lng: -6.2603 };
+          console.log('⚠️ Using default Dublin position');
+          setCurrentPosition(defaultPos);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      console.error('❌ Geolocation not supported');
+      setCurrentPosition({ lat: 53.3498, lng: -6.2603 });
+    }
+  }, [user]);
+
   // Fetch Dublin Bikes
   useEffect(() => {
     if (!authToken) return;
@@ -499,12 +535,12 @@ function App() {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
         const result = await response.json();
-        
+
         if (result.success && result.data) {
           const stationMap = new Map();
           result.data.forEach(station => {
             if (!stationMap.has(station.station_number) ||
-                station.fetched_at > stationMap.get(station.station_number).fetched_at) {
+              station.fetched_at > stationMap.get(station.station_number).fetched_at) {
               stationMap.set(station.station_number, station);
             }
           });
@@ -530,7 +566,7 @@ function App() {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
         const result = await response.json();
-        
+
         if (result.success && result.stations) {
           setLuasStations(result.stations);
         }
@@ -673,10 +709,10 @@ function App() {
         setDataBuffer([]);
         setCurrentActivity(null);
         setDuration(0);
-        
+
         // Reload sessions
         await loadSessions(authToken);
-        
+
         alert('Session saved successfully!');
       }
     } catch (error) {
@@ -691,7 +727,7 @@ function App() {
       lat: position.coords.latitude,
       lng: position.coords.longitude
     };
-    
+
     setCurrentPosition(newPos);
     setRoutePath(prev => [...prev, [newPos.lat, newPos.lng]]);
   };
@@ -710,19 +746,19 @@ function App() {
       accel_x: acc.x,
       accel_y: acc.y,
       accel_z: acc.z,
-      accel_magnitude: Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2),
+      accel_magnitude: Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2),
       speed: 0 // Will be calculated by backend
     };
 
     setDataBuffer(prev => {
       const newBuffer = [...prev, dataPoint];
-      
+
       // Sync every 5 seconds (~8-9 points at 1.72 Hz)
       if (newBuffer.length >= 8) {
         syncDataToBackend(newBuffer);
         return [];
       }
-      
+
       return newBuffer;
     });
   };
@@ -831,7 +867,7 @@ function App() {
           <p style={{ color: '#666', marginBottom: '30px', fontSize: '16px' }}>
             Urban Air Quality & Activity Tracker
           </p>
-          
+
           <div style={{
             backgroundColor: '#f5f5f5',
             borderRadius: '12px',
@@ -898,7 +934,7 @@ function App() {
             <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>Urban Air Quality & Activity Tracker</p>
           </div>
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontWeight: 'bold', color: '#333' }}>{user.displayName}</div>
@@ -938,7 +974,7 @@ function App() {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <h2 style={{ marginTop: 0, color: '#333' }}>Status</h2>
-        
+
         <div style={{
           padding: '16px',
           borderRadius: '8px',
@@ -948,7 +984,7 @@ function App() {
           <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>
             {isRecording ? '🔴 Recording started...' : 'Welcome back! Ready to track your activity.'}
           </div>
-          
+
           {currentActivity && (
             <div style={{ marginTop: '8px' }}>
               <ActivityBadge
@@ -1079,9 +1115,9 @@ function App() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
-            
+
             {currentPosition && <RecenterMap center={currentPosition} />}
-            
+
             {/* User position */}
             {currentPosition && (
               <Marker position={currentPosition} icon={userIcon}>
@@ -1172,7 +1208,7 @@ function App() {
           </p>
         ) : (
           <div>
-            {sessions.map((session) => (
+            {Array.isArray(sessions) && sessions.map((session) => (
               <div
                 key={session.id}
                 onClick={() => setSelectedSession(session)}
