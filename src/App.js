@@ -350,6 +350,75 @@ function SessionDetailModal({ session, onClose }) {
               </div>
             )}
 
+
+            {/* Route Map */}
+            {sessionData && sessionData.dataPoints && sessionData.dataPoints.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ marginBottom: '12px', color: '#333' }}>🗺️ Route Map</h3>
+                <div style={{ height: '400px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #e0e0e0' }}>
+                  <MapContainer
+                    center={[sessionData.dataPoints[0].latitude, sessionData.dataPoints[0].longitude]}
+                    zoom={15}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    />
+                    
+                    {/* Start marker */}
+                    <Marker
+                      position={[sessionData.dataPoints[0].latitude, sessionData.dataPoints[0].longitude]}
+                      icon={L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                      })}
+                    >
+                      <Popup>
+                        <strong>Start</strong><br />
+                        {new Date(sessionData.dataPoints[0].timestamp).toLocaleTimeString()}
+                      </Popup>
+                    </Marker>
+
+                    {/* End marker */}
+                    {sessionData.dataPoints.length > 1 && (
+                      <Marker
+                        position={[
+                          sessionData.dataPoints[sessionData.dataPoints.length - 1].latitude,
+                          sessionData.dataPoints[sessionData.dataPoints.length - 1].longitude
+                        ]}
+                        icon={L.icon({
+                          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                          iconSize: [25, 41],
+                          iconAnchor: [12, 41],
+                          popupAnchor: [1, -34],
+                          shadowSize: [41, 41]
+                        })}
+                      >
+                        <Popup>
+                          <strong>End</strong><br />
+                          {new Date(sessionData.dataPoints[sessionData.dataPoints.length - 1].timestamp).toLocaleTimeString()}
+                        </Popup>
+                      </Marker>
+                    )}
+
+                    {/* Route path */}
+                    <Polyline
+                      positions={sessionData.dataPoints.map(point => [point.latitude, point.longitude])}
+                      color="#2196F3"
+                      weight={4}
+                      opacity={0.7}
+                    />
+                  </MapContainer>
+                </div>
+              </div>
+            )}
+
             {/* Charts */}
             <div style={{ marginBottom: '24px' }}>
               <h3 style={{ marginBottom: '12px', color: '#333' }}>📊 Activity Breakdown</h3>
