@@ -437,7 +437,8 @@ function App() {
   const [authToken, setAuthToken] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [sessionId, setSessionId] = useState(null);
-  const [dataBuffer, setDataBuffer] = useState([]);
+  const dataBufferRef = useRef([]);
+  const [localDataPoints, setLocalDataPoints] = useState(0);
   const [currentActivity, setCurrentActivity] = useState(null);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [routePath, setRoutePath] = useState([]);
@@ -688,7 +689,8 @@ function App() {
       if (result.success) {
         setSessionId(result.sessionId);
         setIsRecording(true);
-        setDataBuffer([]);
+        dataBufferRef.current = [];
+        setLocalDataPoints(0);
         setRoutePath([]);
         setDataPointsCount(0);
         setDuration(0);
@@ -729,19 +731,10 @@ function App() {
                 speed: position.coords.speed || 0
               };
 
-              // Buffer and sync data
-              setDataBuffer(prev => {
-                const newBuffer = [...prev, dataPoint];
-
-                // Sync every 8 points (~8 seconds at 1 point/sec)
-                if (newBuffer.length >= 8) {
-                  console.log(`🔄 Syncing ${newBuffer.length} data points to backend`);
-                  syncDataToBackend(newBuffer);
-                  return [];
-                }
-
-                return newBuffer;
-              });
+              // Push to ref buffer and update counter IMMEDIATELY
+              dataBufferRef.current.push(dataPoint);
+              setLocalDataPoints(prev => prev + 1);
+              console.log(`📍 GPS point #${dataBufferRef.current.length} collected`);
             },
             (error) => {
               console.error('❌ GPS error:', error);
@@ -779,8 +772,9 @@ function App() {
       }
 
       // Send any remaining buffered data
-      if (dataBuffer.length > 0) {
-        await syncDataToBackend(dataBuffer);
+      if (dataBufferRef.current.length > 0) {
+        await syncDataToBackend(dataBufferRef.current);
+        dataBufferRef.current = [];
       }
 
       // Stop session
@@ -796,7 +790,8 @@ function App() {
       if (response.ok) {
         setIsRecording(false);
         setSessionId(null);
-        setDataBuffer([]);
+        dataBufferRef.current = [];
+        setLocalDataPoints(0);
         setCurrentActivity(null);
         setDuration(0);
 
@@ -811,53 +806,16 @@ function App() {
     }
   };
 
-  // Handle GPS position update
-  const handlePositionUpdate = (position) => {
-    const newPos = {
-      lat: position.coords.latitude,
-      lng: position.coords.longitude
-    };
 
-    setCurrentPosition(newPos);
-    setRoutePath(prev => [...prev, [newPos.lat, newPos.lng]]);
-  };
 
-  // Handle accelerometer data
-  const handleMotionEvent = (event) => {
-    if (!isRecording || !currentPosition) return;
 
-    const acc = event.accelerationIncludingGravity;
-    if (!acc || acc.x === null) return;
-
-    const dataPoint = {
-      timestamp: Date.now(),
-      latitude: currentPosition.lat,
-      longitude: currentPosition.lng,
-      accel_x: acc.x,
-      accel_y: acc.y,
-      accel_z: acc.z,
-      accel_magnitude: Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2),
-      speed: 0 // Will be calculated by backend
-    };
-
-    setDataBuffer(prev => {
-      const newBuffer = [...prev, dataPoint];
-
-      // Sync every 5 seconds (~8-9 points at 1.72 Hz)
-      if (newBuffer.length >= 8) {
-        syncDataToBackend(newBuffer);
-        return [];
-      }
-
-      return newBuffer;
-    });
-  };
 
   // Sync data to backend
   const syncDataToBackend = async (data) => {
     if (!data || data.length === 0) return;
 
     try {
+      console.log(`🔄 Syncing ${data.length} points to backend...`);
       const response = await fetch(`${API_URL}/api/data`, {
         method: 'POST',
         headers: {
@@ -871,25 +829,30 @@ function App() {
       });
 
       const result = await response.json();
+      console.log(`✅ Backend response:`, result.success);
+      
       if (result.success && result.classifiedData) {
+        console.log(`✅ Classified ${result.classifiedData.length} points`);
+        
         // Update activity from latest point
         const latest = result.classifiedData[result.classifiedData.length - 1];
-        if (latest.activity) {
+        if (latest.activity && latest.activity !== 'unknown') {
+          console.log(`🏃 Activity detected: ${latest.activity}`);
           setCurrentActivity({
             activity: latest.activity,
             confidence: latest.activity_confidence
           });
         }
 
-        setDataPointsCount(prev => prev + result.classifiedData.length);
-
         // Check air quality every 20 points
-        if (dataPointsCount % 20 === 0 && currentPosition) {
+        const currentCount = dataPointsCount;
+        if (currentCount > 0 && currentCount % 20 === 0 && currentPosition) {
+          console.log('🌫️ Checking air quality...');
           checkAirQuality(currentPosition.lat, currentPosition.lng);
         }
       }
     } catch (error) {
-      console.error('Sync error:', error);
+      console.error('❌ Sync error:', error);
     }
   };
 
@@ -1134,7 +1097,7 @@ function App() {
         }}>
           <h4 style={{ margin: '0 0 8px 0', color: '#666', fontSize: '14px' }}>DATA POINTS</h4>
           <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3' }}>
-            {dataPointsCount}
+            {localDataPoints}
           </div>
         </div>
 
