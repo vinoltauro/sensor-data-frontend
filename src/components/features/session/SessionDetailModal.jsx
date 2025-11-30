@@ -27,6 +27,7 @@ export const SessionDetailModal = ({ session, onClose }) => {
     if (session && session.id) {
       fetchSessionDetails(session.id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   const fetchSessionDetails = async (sessionId) => {

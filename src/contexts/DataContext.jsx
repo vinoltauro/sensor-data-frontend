@@ -1,6 +1,7 @@
 import React, { createContext, useState, useRef, useContext, useEffect } from 'react';
 import { AuthContext } from './AuthContext';
 import { SessionContext } from './SessionContext';
+import { MapContext } from './MapContext';
 import { dataAPI, airQualityAPI } from '../utils/api';
 
 export const DataContext = createContext();
@@ -8,6 +9,7 @@ export const DataContext = createContext();
 export const DataProvider = ({ children }) => {
   const { authToken } = useContext(AuthContext);
   const { sessionId, isRecording, setCurrentActivity } = useContext(SessionContext);
+  const { currentPosition } = useContext(MapContext);
 
   const [airQuality, setAirQuality] = useState(null);
   const [healthRecommendation, setHealthRecommendation] = useState(null);
@@ -17,6 +19,16 @@ export const DataProvider = ({ children }) => {
   // Use refs for high-frequency data to avoid re-renders
   const dataBufferRef = useRef([]);
   const accelRef = useRef({ x: 0, y: 0, z: 0 });
+  const hasCheckedInitialAirQuality = useRef(false);
+
+  // Check air quality on initial load
+  useEffect(() => {
+    if (currentPosition && authToken && !hasCheckedInitialAirQuality.current) {
+      console.log('🌫️ Checking initial air quality for user location...');
+      checkAirQuality(currentPosition.lat, currentPosition.lng, 'walking');
+      hasCheckedInitialAirQuality.current = true;
+    }
+  }, [currentPosition, authToken]);
 
   // Continuously update accelerometer values
   useEffect(() => {
@@ -43,7 +55,7 @@ export const DataProvider = ({ children }) => {
   }, [isRecording]);
 
   // Sync data to backend
-  const syncDataToBackend = async (data) => {
+  const syncDataToBackend = async (data, currentPosition) => {
     if (!data || data.length === 0) return;
 
     try {
@@ -64,7 +76,18 @@ export const DataProvider = ({ children }) => {
           });
         }
 
-        setDataPointsCount(prev => prev + result.classifiedData.length);
+        const newCount = dataPointsCount + result.classifiedData.length;
+        setDataPointsCount(newCount);
+
+        // Check air quality every 20 points
+        if (newCount > 0 && newCount % 20 === 0 && currentPosition) {
+          console.log('🌫️ Checking air quality...');
+          checkAirQuality(
+            currentPosition.lat,
+            currentPosition.lng,
+            latest.activity
+          );
+        }
       }
     } catch (error) {
       console.error('❌ Sync error:', error);
@@ -113,7 +136,7 @@ export const DataProvider = ({ children }) => {
   // Flush buffer (sync and clear)
   const flushDataBuffer = async () => {
     if (dataBufferRef.current.length > 0) {
-      await syncDataToBackend([...dataBufferRef.current]);
+      await syncDataToBackend([...dataBufferRef.current], currentPosition);
       clearDataBuffer();
     }
   };

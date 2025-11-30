@@ -2,7 +2,6 @@ import React from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet';
 import { useMap } from '../../../hooks/useMap';
 import { useSession } from '../../../hooks/useSession';
-import { useData } from '../../../hooks/useData';
 import { userIcon, getBikeIcon, luasGreenIcon, luasRedIcon } from '../../../utils/icons';
 import { DUBLIN_CENTER } from '../../../utils/constants';
 import 'leaflet/dist/leaflet.css';
