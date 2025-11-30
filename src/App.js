@@ -278,7 +278,9 @@ function SessionDetailModal({ session, onClose }) {
               Session Details
             </h2>
             <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: '14px' }}>
-              {new Date(session.startTime?.toDate?.() || session.startTime).toLocaleString()}
+              {session.startTime?._seconds 
+                ? new Date(session.startTime._seconds * 1000).toLocaleString()
+                : new Date(session.startTime?.toDate?.() || session.startTime).toLocaleString()}
             </p>
           </div>
           <button
@@ -608,15 +610,41 @@ function App() {
   // Load user sessions
   const loadSessions = async (token) => {
     try {
+      console.log('🔄 Loading sessions...');
       const response = await fetch(`${API_URL}/api/sessions?limit=20`, {
         headers: { 'Authorization': `Bearer ${token || authToken}` }
       });
       const result = await response.json();
+      console.log('📦 Sessions response:', result);
+      
       if (result.success) {
-        setSessions(result.sessions);
+        let sessionsArray = [];
+        
+        // Handle nested response bug: {success: true, sessions: {success: true, sessions: [...]}}
+        let sessionsData = result.sessions;
+        
+        // Check if sessions is nested (backend bug)
+        if (sessionsData && sessionsData.sessions && Array.isArray(sessionsData.sessions)) {
+          console.log('⚠️ Detected nested sessions response - unwrapping');
+          sessionsData = sessionsData.sessions;
+        }
+        
+        // Now handle the actual sessions data
+        if (Array.isArray(sessionsData)) {
+          sessionsArray = [...sessionsData];
+        } else if (sessionsData && typeof sessionsData === 'object') {
+          // Fallback: convert object to array
+          sessionsArray = Object.values(sessionsData);
+          console.log('⚠️ Converted object to array');
+        }
+        
+        console.log('📊 Session count:', sessionsArray.length);
+        console.log('✅ Setting sessions:', sessionsArray.length, 'sessions');
+        setSessions(sessionsArray);
+        console.log('✅ Sessions state updated!');
       }
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.error('❌ Error loading sessions:', error);
     }
   };
 
@@ -1299,10 +1327,14 @@ function App() {
                 }}>
                   <div>
                     <strong style={{ color: '#333' }}>
-                      {new Date(session.startTime?.toDate?.() || session.startTime).toLocaleDateString()}
+                      {session.startTime?._seconds 
+                        ? new Date(session.startTime._seconds * 1000).toLocaleDateString()
+                        : new Date(session.startTime?.toDate?.() || session.startTime).toLocaleDateString()}
                     </strong>
                     <span style={{ color: '#666', marginLeft: '8px', fontSize: '14px' }}>
-                      {new Date(session.startTime?.toDate?.() || session.startTime).toLocaleTimeString()}
+                      {session.startTime?._seconds
+                        ? new Date(session.startTime._seconds * 1000).toLocaleTimeString()
+                        : new Date(session.startTime?.toDate?.() || session.startTime).toLocaleTimeString()}
                     </span>
                   </div>
                   <ActivityBadge activity={session.primaryActivity} />
