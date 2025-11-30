@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/
 
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDI0iGADsBY0WKkvSHK76uX0xNBH48PkZE",
+  apiKey: "AIzaSyBGvBCReccBptKJRMUla602ZkEUE3etEiY",
   authDomain: "urban-computing-f6ea7.firebaseapp.com",
   projectId: "urban-computing-f6ea7",
   storageBucket: "urban-computing-f6ea7.firebasestorage.app",
