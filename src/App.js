@@ -452,6 +452,7 @@ function App() {
   const motionHandlerRef = useRef(null);
   const startTimeRef = useRef(null);
   const durationIntervalRef = useRef(null);
+  const accelRef = useRef({ x: 0, y: 0, z: 0 }); // Store current accelerometer values
 
   // Authentication listener
   useEffect(() => {
@@ -524,6 +525,30 @@ function App() {
       setCurrentPosition({ lat: 53.3498, lng: -6.2603 });
     }
   }, [user]);
+
+  // Continuously update accelerometer values
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const handleMotion = (event) => {
+      const acc = event.accelerationIncludingGravity;
+      if (acc && acc.x !== null) {
+        accelRef.current = {
+          x: acc.x,
+          y: acc.y,
+          z: acc.z
+        };
+      }
+    };
+
+    console.log('📱 Starting accelerometer listener');
+    window.addEventListener('devicemotion', handleMotion);
+    
+    return () => {
+      console.log('📱 Stopping accelerometer listener');
+      window.removeEventListener('devicemotion', handleMotion);
+    };
+  }, [isRecording]);
 
   // Fetch Dublin Bikes
   useEffect(() => {
@@ -646,19 +671,56 @@ function App() {
           setDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
         }, 1000);
 
-        // Start GPS tracking
+        // Start GPS tracking - THIS DRIVES DATA COLLECTION
         if (navigator.geolocation) {
+          console.log('🎯 Starting GPS-driven data collection');
           watchIdRef.current = navigator.geolocation.watchPosition(
-            handlePositionUpdate,
-            (error) => console.error('GPS error:', error),
+            (position) => {
+              const newPos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+
+              // Update position and route
+              setCurrentPosition(newPos);
+              setRoutePath(prev => [...prev, [newPos.lat, newPos.lng]]);
+
+              // Create data point with CURRENT accelerometer values
+              const dataPoint = {
+                timestamp: Date.now(),
+                latitude: newPos.lat,
+                longitude: newPos.lng,
+                accel_x: accelRef.current.x,
+                accel_y: accelRef.current.y,
+                accel_z: accelRef.current.z,
+                accel_magnitude: Math.sqrt(
+                  accelRef.current.x ** 2 + 
+                  accelRef.current.y ** 2 + 
+                  accelRef.current.z ** 2
+                ),
+                speed: position.coords.speed || 0
+              };
+
+              // Buffer and sync data
+              setDataBuffer(prev => {
+                const newBuffer = [...prev, dataPoint];
+
+                // Sync every 8 points (~8 seconds at 1 point/sec)
+                if (newBuffer.length >= 8) {
+                  console.log(`🔄 Syncing ${newBuffer.length} data points to backend`);
+                  syncDataToBackend(newBuffer);
+                  return [];
+                }
+
+                return newBuffer;
+              });
+            },
+            (error) => {
+              console.error('❌ GPS error:', error);
+              alert('GPS error: ' + error.message);
+            },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
           );
-        }
-
-        // Start accelerometer
-        if (window.DeviceMotionEvent) {
-          motionHandlerRef.current = handleMotionEvent;
-          window.addEventListener('devicemotion', motionHandlerRef.current);
         }
       }
     } catch (error) {
