@@ -92,10 +92,10 @@ export const DataProvider = ({ children }) => {
       const result = await airQualityAPI.getCurrent(authToken, lat, lng);
       console.log('🌫️ Air quality API response:', result);
 
-      if (result.success && result.station) {
-        console.log('✅ Setting air quality data:', result.station);
-        // Store the station data which includes aqi, pollutants, etc.
-        setAirQuality(result.station);
+      if (result.success && result.data) {
+        console.log('✅ Setting air quality data:', result.data);
+        // Store the data which includes aqi, pollutants, station info, etc.
+        setAirQuality(result.data);
 
         // Get health recommendation
         const activityType = activity || 'walking';
