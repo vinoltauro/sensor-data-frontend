@@ -59,14 +59,25 @@ export const getActivityColor = (activity) => {
   return ACTIVITY_COLORS[activity?.toLowerCase()] || ACTIVITY_COLORS.unknown;
 };
 
+// Capitalize first letter of each word
+const capitalizeCategory = (category) => {
+  if (!category) return '';
+  return category
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 // Get AQI color
 export const getAQIColor = (category) => {
-  return AQI_COLORS[category] || '#9E9E9E';
+  const formattedCategory = capitalizeCategory(category);
+  return AQI_COLORS[formattedCategory] || '#9E9E9E';
 };
 
 // Get AQI emoji
 export const getAQIEmoji = (category) => {
-  return AQI_EMOJIS[category] || '❓';
+  const formattedCategory = capitalizeCategory(category);
+  return AQI_EMOJIS[formattedCategory] || '❓';
 };
 
 // Format steps with comma separator

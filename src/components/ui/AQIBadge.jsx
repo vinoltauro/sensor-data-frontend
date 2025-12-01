@@ -4,7 +4,13 @@ import { getAQIColor, getAQIEmoji } from '../../utils/formatters';
 export const AQIBadge = ({ aqi, category }) => {
   const bgColor = getAQIColor(category);
   const emoji = getAQIEmoji(category);
-  const textColor = category === 'Moderate' ? 'text-black' : 'text-white';
+  // Use black text for Moderate (yellow background) for better readability
+  const textColor = category?.toLowerCase() === 'moderate' ? 'text-black' : 'text-white';
+
+  // Capitalize first letter for display
+  const displayCategory = category ?
+    category.charAt(0).toUpperCase() + category.slice(1).toLowerCase() :
+    'Unknown';
 
   return (
     <div
@@ -13,7 +19,7 @@ export const AQIBadge = ({ aqi, category }) => {
     >
       <span>{emoji}</span>
       <span>AQI: {aqi}</span>
-      <span>({category})</span>
+      <span>({displayCategory})</span>
     </div>
   );
 };

@@ -119,29 +119,57 @@ export const SessionDetailModal = ({ session, onClose }) => {
         ) : (
           <>
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-              <StatsCard icon="📏" label="Distance" value={`${session.totalDistance?.toFixed(2) || 0} km`} />
-              <StatsCard icon="👣" label="Steps" value={session.steps?.toLocaleString() || 0} />
-              <StatsCard icon="⏱️" label="Duration" value={`${Math.floor((session.totalDuration || 0) / 60)}m ${(session.totalDuration || 0) % 60}s`} />
-              <StatsCard icon="🏃" label="Pace" value={session.pace?.display || 'N/A'} />
-              <StatsCard icon="🔥" label="Calories" value={session.calories || 0} />
-              <StatsCard icon="🎯" label="Primary" value={session.primaryActivity || 'Unknown'} />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">📏</div>
+                <div className="text-xs text-gray-600 mb-1">Distance</div>
+                <div className="text-sm font-bold text-gray-800">{session.totalDistance?.toFixed(2) || 0} km</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">👣</div>
+                <div className="text-xs text-gray-600 mb-1">Steps</div>
+                <div className="text-sm font-bold text-gray-800">{session.steps?.toLocaleString() || 0}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">⏱️</div>
+                <div className="text-xs text-gray-600 mb-1">Duration</div>
+                <div className="text-sm font-bold text-gray-800">{Math.floor((session.totalDuration || 0) / 60)}m {(session.totalDuration || 0) % 60}s</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">🏃</div>
+                <div className="text-xs text-gray-600 mb-1">Pace</div>
+                <div className="text-sm font-bold text-gray-800">{session.pace?.display || 'N/A'}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">🔥</div>
+                <div className="text-xs text-gray-600 mb-1">Calories</div>
+                <div className="text-sm font-bold text-gray-800">{session.calories || 0}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-lg mb-1">🎯</div>
+                <div className="text-xs text-gray-600 mb-1">Primary</div>
+                <div className="text-sm font-bold text-gray-800">{session.primaryActivity || 'Unknown'}</div>
+              </div>
             </div>
 
             {/* Health Score */}
             {session.healthScore && (
               <div className="mb-6">
-                <h3 className="mb-3 text-gray-800">💚 Health Score</h3>
-                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
-                  <HealthScoreBadge
-                    score={session.healthScore.totalScore}
-                    rating={session.healthScore.rating}
-                  />
+                <h3 className="mb-3 text-base text-gray-800">💚 Health Score</h3>
+                <div className="grid grid-cols-1 md:grid-cols-[150px_1fr] gap-4">
+                  <div className="bg-gray-50 rounded-lg p-3 text-center border-2" style={{
+                    borderColor: session.healthScore.totalScore >= 7 ? '#4CAF50' :
+                                 session.healthScore.totalScore >= 5 ? '#FF9800' : '#F44336'
+                  }}>
+                    <div className="text-xs text-gray-600 mb-1">Health Score</div>
+                    <div className="text-2xl font-bold text-gray-800">{session.healthScore.totalScore}/10</div>
+                    <div className="text-sm mt-1">{session.healthScore.rating?.emoji} {session.healthScore.rating?.label}</div>
+                  </div>
                   <div>
                     {session.healthScore.insights?.map((insight, idx) => (
                       <div
                         key={idx}
-                        className="p-2 px-3 mb-2 rounded-lg text-sm"
+                        className="p-2 px-3 mb-2 rounded-lg text-xs"
                         style={{
                           backgroundColor: insight.type === 'positive' ? '#E8F5E9' :
                             insight.type === 'warning' ? '#FFF3E0' : '#E3F2FD'
@@ -158,8 +186,8 @@ export const SessionDetailModal = ({ session, onClose }) => {
             {/* Route Map */}
             {sessionData && sessionData.dataPoints && sessionData.dataPoints.length > 0 && (
               <div className="mb-6">
-                <h3 className="mb-3 text-gray-800">🗺️ Route Map</h3>
-                <div className="h-96 rounded-xl overflow-hidden border-2 border-gray-200">
+                <h3 className="mb-3 text-base text-gray-800">🗺️ Route Map</h3>
+                <div className="h-64 rounded-xl overflow-hidden border-2 border-gray-200">
                   <MapContainer
                     center={[sessionData.dataPoints[0].latitude, sessionData.dataPoints[0].longitude]}
                     zoom={15}
@@ -225,9 +253,9 @@ export const SessionDetailModal = ({ session, onClose }) => {
 
             {/* Charts */}
             <div className="mb-6">
-              <h3 className="mb-3 text-gray-800">📊 Activity Breakdown</h3>
+              <h3 className="mb-3 text-base text-gray-800">📊 Activity Breakdown</h3>
               {activityPieData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={180}>
                   <PieChart>
                     <Pie
                       data={activityPieData}
@@ -235,31 +263,32 @@ export const SessionDetailModal = ({ session, onClose }) => {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
+                      outerRadius={60}
                       label={(entry) => `${entry.name}: ${entry.value.toFixed(1)}%`}
+                      style={{ fontSize: '11px' }}
                     >
                       {activityPieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[entry.name] || '#999'} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip contentStyle={{ fontSize: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-gray-400 text-center">No activity data available</p>
+                <p className="text-gray-400 text-center text-sm">No activity data available</p>
               )}
             </div>
 
             {speedData.length > 0 && (
               <div className="mb-6">
-                <h3 className="mb-3 text-gray-800">📈 Speed Over Time</h3>
-                <ResponsiveContainer width="100%" height={200}>
+                <h3 className="mb-3 text-base text-gray-800">📈 Speed Over Time</h3>
+                <ResponsiveContainer width="100%" height={160}>
                   <LineChart data={speedData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" label={{ value: 'Time', position: 'insideBottom', offset: -5 }} />
-                    <YAxis label={{ value: 'Speed (m/s)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Legend />
+                    <XAxis dataKey="time" tick={{ fontSize: 11 }} label={{ value: 'Time', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} label={{ value: 'Speed (m/s)', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <Tooltip contentStyle={{ fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
                     <Line type="monotone" dataKey="speed" stroke="#2196F3" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -268,14 +297,14 @@ export const SessionDetailModal = ({ session, onClose }) => {
 
             {aqiData.length > 0 && (
               <div className="mb-6">
-                <h3 className="mb-3 text-gray-800">🌫️ Air Quality Exposure</h3>
-                <ResponsiveContainer width="100%" height={200}>
+                <h3 className="mb-3 text-base text-gray-800">🌫️ Air Quality Exposure</h3>
+                <ResponsiveContainer width="100%" height={160}>
                   <AreaChart data={aqiData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" label={{ value: 'Time', position: 'insideBottom', offset: -5 }} />
-                    <YAxis label={{ value: 'AQI', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Legend />
+                    <XAxis dataKey="time" tick={{ fontSize: 11 }} label={{ value: 'Time', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} label={{ value: 'AQI', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+                    <Tooltip contentStyle={{ fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
                     <Area type="monotone" dataKey="aqi" stroke="#FF9800" fill="#FFE0B2" />
                   </AreaChart>
                 </ResponsiveContainer>

@@ -21,15 +21,6 @@ export const DataProvider = ({ children }) => {
   const accelRef = useRef({ x: 0, y: 0, z: 0 });
   const hasCheckedInitialAirQuality = useRef(false);
 
-  // Check air quality on initial load
-  useEffect(() => {
-    if (currentPosition && authToken && !hasCheckedInitialAirQuality.current) {
-      console.log('🌫️ Checking initial air quality for user location...');
-      checkAirQuality(currentPosition.lat, currentPosition.lng, 'walking');
-      hasCheckedInitialAirQuality.current = true;
-    }
-  }, [currentPosition, authToken]);
-
   // Continuously update accelerometer values
   useEffect(() => {
     if (!isRecording) return;
@@ -97,23 +88,41 @@ export const DataProvider = ({ children }) => {
   // Check air quality
   const checkAirQuality = async (lat, lng, activity) => {
     try {
+      console.log('🌫️ Fetching air quality for:', { lat, lng, activity });
       const result = await airQualityAPI.getCurrent(authToken, lat, lng);
+      console.log('🌫️ Air quality API response:', result);
 
-      if (result.success && result.data) {
-        setAirQuality(result.data);
+      if (result.success && result.station) {
+        console.log('✅ Setting air quality data:', result.station);
+        // Store the station data which includes aqi, pollutants, etc.
+        setAirQuality(result.station);
 
         // Get health recommendation
         const activityType = activity || 'walking';
         const recResult = await airQualityAPI.getRecommendations(authToken, lat, lng, activityType);
+        console.log('💚 Health recommendation response:', recResult);
 
         if (recResult.success) {
           setHealthRecommendation(recResult.recommendation);
         }
+      } else {
+        console.warn('⚠️ Air quality API returned no data:', result);
       }
     } catch (error) {
-      console.error('Air quality check error:', error);
+      console.error('❌ Air quality check error:', error);
+      console.error('❌ Error details:', error.message, error.stack);
     }
   };
+
+  // Check air quality on initial load
+  useEffect(() => {
+    if (currentPosition && authToken && !hasCheckedInitialAirQuality.current) {
+      console.log('🌫️ Checking initial air quality for user location...');
+      checkAirQuality(currentPosition.lat, currentPosition.lng, 'walking');
+      hasCheckedInitialAirQuality.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPosition, authToken]);
 
   // Add data point to buffer
   const addDataPoint = (dataPoint) => {
