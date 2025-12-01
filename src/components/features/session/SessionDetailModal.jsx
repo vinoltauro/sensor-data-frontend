@@ -23,6 +23,17 @@ export const SessionDetailModal = ({ session, onClose }) => {
   const [sessionData, setSessionData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  console.log('🔍 Modal opened with session:', session);
+  console.log('🔍 Session fields:', {
+    id: session?.id,
+    totalDistance: session?.totalDistance,
+    steps: session?.steps,
+    totalDuration: session?.totalDuration,
+    primaryActivity: session?.primaryActivity,
+    calories: session?.calories,
+    pace: session?.pace
+  });
+
   useEffect(() => {
     if (session && session.id) {
       fetchSessionDetails(session.id);
@@ -32,13 +43,27 @@ export const SessionDetailModal = ({ session, onClose }) => {
 
   const fetchSessionDetails = async (sessionId) => {
     try {
+      console.log('📥 Fetching session details for ID:', sessionId);
       const result = await sessionAPI.getSessionDetails(authToken, sessionId);
+      console.log('📦 Session API response:', result);
+
       if (result.success) {
+        console.log('✅ Session data received:', result.data);
+        console.log('📊 Session data fields:', {
+          totalDistance: result.data?.totalDistance,
+          steps: result.data?.steps,
+          totalDuration: result.data?.totalDuration,
+          primaryActivity: result.data?.primaryActivity,
+          calories: result.data?.calories,
+          pace: result.data?.pace
+        });
         setSessionData(result.data);
+      } else {
+        console.warn('⚠️ Session API returned success=false');
       }
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching session details:', error);
+      console.error('❌ Error fetching session details:', error);
       setLoading(false);
     }
   };
@@ -68,9 +93,10 @@ export const SessionDetailModal = ({ session, onClose }) => {
   };
 
   const prepareActivityPieData = () => {
-    if (!session.activities) return [];
+    const activities = sessionData?.activities || session.activities;
+    if (!activities) return [];
 
-    return Object.entries(session.activities)
+    return Object.entries(activities)
       .filter(([activity]) => activity !== 'unknown')
       .map(([activity, data]) => ({
         name: activity.charAt(0).toUpperCase() + activity.slice(1),
@@ -82,6 +108,12 @@ export const SessionDetailModal = ({ session, onClose }) => {
   const speedData = prepareSpeedData();
   const aqiData = prepareAQIData();
   const activityPieData = prepareActivityPieData();
+
+  console.log('📈 Chart data prepared:', {
+    speedDataPoints: speedData.length,
+    aqiDataPoints: aqiData.length,
+    activityPieData: activityPieData
+  });
 
   if (!session) return null;
 
@@ -123,50 +155,50 @@ export const SessionDetailModal = ({ session, onClose }) => {
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">📏</div>
                 <div className="text-xs text-gray-600 mb-1">Distance</div>
-                <div className="text-sm font-bold text-gray-800">{session.totalDistance?.toFixed(2) || 0} km</div>
+                <div className="text-sm font-bold text-gray-800">{sessionData?.totalDistance?.toFixed(2) || session.totalDistance?.toFixed(2) || 0} km</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">👣</div>
                 <div className="text-xs text-gray-600 mb-1">Steps</div>
-                <div className="text-sm font-bold text-gray-800">{session.steps?.toLocaleString() || 0}</div>
+                <div className="text-sm font-bold text-gray-800">{sessionData?.steps?.toLocaleString() || session.steps?.toLocaleString() || 0}</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">⏱️</div>
                 <div className="text-xs text-gray-600 mb-1">Duration</div>
-                <div className="text-sm font-bold text-gray-800">{Math.floor((session.totalDuration || 0) / 60)}m {(session.totalDuration || 0) % 60}s</div>
+                <div className="text-sm font-bold text-gray-800">{Math.floor((sessionData?.totalDuration || session.totalDuration || 0) / 60)}m {(sessionData?.totalDuration || session.totalDuration || 0) % 60}s</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">🏃</div>
                 <div className="text-xs text-gray-600 mb-1">Pace</div>
-                <div className="text-sm font-bold text-gray-800">{session.pace?.display || 'N/A'}</div>
+                <div className="text-sm font-bold text-gray-800">{sessionData?.pace?.display || session.pace?.display || 'N/A'}</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">🔥</div>
                 <div className="text-xs text-gray-600 mb-1">Calories</div>
-                <div className="text-sm font-bold text-gray-800">{session.calories || 0}</div>
+                <div className="text-sm font-bold text-gray-800">{sessionData?.calories || session.calories || 0}</div>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <div className="text-lg mb-1">🎯</div>
                 <div className="text-xs text-gray-600 mb-1">Primary</div>
-                <div className="text-sm font-bold text-gray-800">{session.primaryActivity || 'Unknown'}</div>
+                <div className="text-sm font-bold text-gray-800">{sessionData?.primaryActivity || session.primaryActivity || 'Unknown'}</div>
               </div>
             </div>
 
             {/* Health Score */}
-            {session.healthScore && (
+            {(sessionData?.healthScore || session.healthScore) && (
               <div className="mb-6">
                 <h3 className="mb-3 text-base text-gray-800">💚 Health Score</h3>
                 <div className="grid grid-cols-1 md:grid-cols-[150px_1fr] gap-4">
                   <div className="bg-gray-50 rounded-lg p-3 text-center border-2" style={{
-                    borderColor: session.healthScore.totalScore >= 7 ? '#4CAF50' :
-                                 session.healthScore.totalScore >= 5 ? '#FF9800' : '#F44336'
+                    borderColor: (sessionData?.healthScore?.totalScore || session.healthScore?.totalScore) >= 7 ? '#4CAF50' :
+                                 (sessionData?.healthScore?.totalScore || session.healthScore?.totalScore) >= 5 ? '#FF9800' : '#F44336'
                   }}>
                     <div className="text-xs text-gray-600 mb-1">Health Score</div>
-                    <div className="text-2xl font-bold text-gray-800">{session.healthScore.totalScore}/10</div>
-                    <div className="text-sm mt-1">{session.healthScore.rating?.emoji} {session.healthScore.rating?.label}</div>
+                    <div className="text-2xl font-bold text-gray-800">{sessionData?.healthScore?.totalScore || session.healthScore?.totalScore}/10</div>
+                    <div className="text-sm mt-1">{(sessionData?.healthScore?.rating || session.healthScore?.rating)?.emoji} {(sessionData?.healthScore?.rating || session.healthScore?.rating)?.label}</div>
                   </div>
                   <div>
-                    {session.healthScore.insights?.map((insight, idx) => (
+                    {(sessionData?.healthScore?.insights || session.healthScore?.insights)?.map((insight, idx) => (
                       <div
                         key={idx}
                         className="p-2 px-3 mb-2 rounded-lg text-xs"
